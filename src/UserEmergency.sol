@@ -8,15 +8,18 @@ contract UserEmergency {
     enum EmergencyType {Water, Food, Tent, UnderRubble, UnderDanger, SpecialNeed, WorkMachine, Custom}
 
     struct EmergencyReport {
-        address creator;
-        uint64 lat; // total 19 digits , 16 decimals for after dot.
-        uint64 len; // total 19 digits , 16 decimals for after dot.
-        EmergencyType emergencyType;
-        uint8 urgencyRate;
-        string description;
-        uint256 timeStamp;
-        bytes32 id;
+    address creator;
+    uint64 lat; // total 19 digits,  16 decimals for after dot.
+    uint64 len; // total 19 digits,  16 decimals for after dot.
+    EmergencyType emergencyType;
+    uint8 urgencyRate;
+    string description;
+    uint256 timeStamp;
+    bytes32 id;
+    uint256 approvalCount;
+    uint256 disapprovalCount;
     }
+
     struct EmergencyReportWithNoId {
         uint64 lat;
         uint64 len;
@@ -34,18 +37,16 @@ contract UserEmergency {
         uint256 timeStamp;
         bytes32 id;
     }
-    struct Heading {
-        address creator;
-        uint64 lat;
-        uint64 len;
-        string description;
-        uint256 timeStamp;
-        bytes32 id;
-    }
-    mapping(bytes32 id => EmergencyReport emergencyReport) public s_EmergencyReports;
+  
+    mapping(bytes32 id => EmergencyReport emergencyReport) private s_EmergencyReports;
     mapping(bytes32 id => Information info) public s_Information;
-    mapping(bytes32 id => Heading heading) public s_Heading;
+    mapping(bytes32 id => address[]) private s_Voters;
     mapping(EmergencyType emergencyType => bytes32[] ids) public s_EmergencyTypeToIdArray;
+
+    mapping(address => bool) private voted; 
+    mapping(Information info => address[] heading) s_Heading;
+
+    
 
     event EmergencyReportCreatedEvent(
         address creator,
@@ -103,6 +104,12 @@ contract UserEmergency {
     event HeadingCallRemovedEvent(
         bytes32
     );
+     event VotesCountedEvent(
+        bytes32 id,
+        uint256 approvalCount,
+        uint256 disapprovalCount
+    );
+
 
     function createEmergencyReport(EmergencyReportWithNoId memory _emergencyReportWithNoId) public {
 
@@ -114,18 +121,21 @@ contract UserEmergency {
             _emergencyReportWithNoId.urgencyRate, 
             _emergencyReportWithNoId.description, 
             _emergencyReportWithNoId.timeStamp));
-
+        
         s_EmergencyReports[id] = EmergencyReport({
-            creator: msg.sender,
-            lat: _emergencyReportWithNoId.lat,
-            len: _emergencyReportWithNoId.len,
-            emergencyType: _emergencyReportWithNoId.emergencyType,
-            urgencyRate: _emergencyReportWithNoId.urgencyRate,
-            description: _emergencyReportWithNoId.description,
-            timeStamp: _emergencyReportWithNoId.timeStamp,
-            id: id
-        });
+        creator: msg.sender,
+        lat: _emergencyReportWithNoId.lat,
+        len: _emergencyReportWithNoId.len,
+        emergencyType: _emergencyReportWithNoId.emergencyType,
+        urgencyRate: _emergencyReportWithNoId.urgencyRate,
+        description: _emergencyReportWithNoId.description,
+        timeStamp: _emergencyReportWithNoId.timeStamp,
+        id: id,
+        approvalCount:0,
+        disapprovalCount:0
+        });    
         s_EmergencyTypeToIdArray[ _emergencyReportWithNoId.emergencyType].push(id);
+        s_Voters[id].push(msg.sender);
         
         emit EmergencyReportCreatedEvent(
             msg.sender, 
@@ -137,6 +147,26 @@ contract UserEmergency {
             _emergencyReportWithNoId.timeStamp, 
             id);
     }    
+
+       function voteForEmergency(address sender, bool approve, bytes32 id) public {
+        // Ensure the report exists
+        require(s_EmergencyReports[id].creator != address(0), "Emergency report does not exist");
+
+        // Ensure the voter has not voted before
+        require(voted[sender] == false,"Sender has already voted");
+
+        // Mark the voter as voted
+        voted[sender] = true;
+        s_Voters[id].push(sender);
+
+        // Update approval or disapproval count
+        if (approve) {
+            s_EmergencyReports[id].approvalCount++;
+        } else {
+            s_EmergencyReports[id].disapprovalCount++;
+        }
+
+    }
     function updateEmergencyReport(bytes32 id,EmergencyReportWithNoId memory _emergencyReportWithNoId) public {
         require(msg.sender == s_EmergencyReports[id].creator, "Only the creator update the emergency report");
        
@@ -170,7 +200,7 @@ contract UserEmergency {
         }
     }
 
-    function createLocationNotification(Information memory _information) public {
+    function createInformation(Information memory _information) public {
          bytes32 id = keccak256(abi.encodePacked(
             msg.sender, 
             _information.lat, 
@@ -186,6 +216,8 @@ contract UserEmergency {
             timeStamp: _information.timeStamp,
             id: _information.id
         });
+        s_Information[id].push(msg.sender);
+        
         emit InformationCreatedEvent(
             msg.sender,
             _information.lat,
@@ -194,7 +226,7 @@ contract UserEmergency {
             _information.timeStamp,
             id);
     }
-    function updateLocationNotification(bytes32 id, Information memory information) public {
+    function updateInformation(bytes32 id, Information memory information) public {
         require(s_Information[id].id != 0, "Invalid id");
 
         s_Information[id].lat = information.lat;
@@ -209,55 +241,12 @@ contract UserEmergency {
             information.timeStamp
         );
     }
-    function removeLocationNotification(bytes32 id) public {
+    function removeInformation(bytes32 id) public {
         require(s_Information[id].id != 0,"Invalid id");
         s_Information[id].id = 0;
 
         emit InformationRemovedEvent(id);
     }
-
-    function createHeadingCall(Heading memory _heading) public {
-        bytes32 id = encryptionProcessOfHeading(_heading);
-        s_Heading[id] = Heading({
-            creator: msg.sender,
-            lat: _heading.lat,
-            len: _heading.len,
-            description: _heading.description,
-            timeStamp: _heading.timeStamp,
-            id: id
-        }); 
-
-        emit HeadingCallCreatedEvent(
-            _heading.creator,
-            _heading.lat,
-            _heading.len,
-            _heading.description,
-            _heading.timeStamp,
-            _heading.id
-        );
-    }
-     function updateHeadingCall(bytes32 id,Heading memory heading) public {
-        require(s_Heading[id].id != 0, "Invalid id");
-
-        s_Heading[id].lat = heading.lat;
-        s_Heading[id].len = heading.len;
-        s_Heading[id].description = heading.description;
-        s_Heading[id].timeStamp = heading.timeStamp;
-
-        emit HeadingCallUpdatedEvent(
-            heading.lat,
-            heading.len,
-            heading.description,
-            heading.timeStamp
-        );
-    }
-    function removeHeadingLocation(bytes32 id) public {
-        require(s_Heading[id].id != 0,"Invalid id");
-        s_Heading[id].id = 0;
-
-        emit HeadingCallRemovedEvent(id);
-    }
-
     function getIdArray(EmergencyType emergencyType) public view returns (bytes32[] memory ids) {
         require(s_EmergencyTypeToIdArray[emergencyType].length != 0, "There is no id with this type");
         return s_EmergencyTypeToIdArray[emergencyType];
@@ -288,15 +277,6 @@ contract UserEmergency {
             _information.timeStamp
         ));
     } 
-    function encryptionProcessOfHeading(Heading memory _heading) public view returns (bytes32) {
-        return keccak256(abi.encodePacked(
-            msg.sender,
-            _heading.lat,
-            _heading.len,
-            _heading.description,
-            _heading.timeStamp
-        ));
-    }
     
    
 }
