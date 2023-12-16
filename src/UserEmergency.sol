@@ -34,8 +34,17 @@ contract UserEmergency {
         uint256 timeStamp;
         bytes32 id;
     }
+    struct Heading {
+        address creator;
+        uint64 lat;
+        uint64 len;
+        string description;
+        uint256 timeStamp;
+        bytes32 id;
+    }
     mapping(bytes32 id => EmergencyReport emergencyReport) public s_EmergencyReports;
     mapping(bytes32 id => Information info) public s_Information;
+    mapping(bytes32 id => Heading heading) public s_Heading;
     mapping(EmergencyType emergencyType => bytes32[] ids) public s_EmergencyTypeToIdArray;
 
     event EmergencyReportCreatedEvent(
@@ -75,6 +84,24 @@ contract UserEmergency {
     );
     event InformationRemovedEvent(
         bytes32 id
+    );
+
+    event HeadingCallCreatedEvent(
+        address creator,
+        uint64 lat,
+        uint64 len,
+        string description,
+        uint256 timestamp,
+        bytes32 id
+    );
+    event HeadingCallUpdatedEvent(
+        uint64 lat,
+        uint64 len,
+        string description,
+        uint256 timestamp
+    );
+    event HeadingCallRemovedEvent(
+        bytes32
     );
 
     function createEmergencyReport(EmergencyReportWithNoId memory _emergencyReportWithNoId) public {
@@ -188,6 +215,49 @@ contract UserEmergency {
 
         emit InformationRemovedEvent(id);
     }
+
+    function createHeadingCall(Heading memory _heading) public {
+        bytes32 id = encryptionProcessOfHeading(_heading);
+        s_Heading[id] = Heading({
+            creator: msg.sender,
+            lat: _heading.lat,
+            len: _heading.len,
+            description: _heading.description,
+            timeStamp: _heading.timeStamp,
+            id: id
+        }); 
+
+        emit HeadingCallCreatedEvent(
+            _heading.creator,
+            _heading.lat,
+            _heading.len,
+            _heading.description,
+            _heading.timeStamp,
+            _heading.id
+        );
+    }
+     function updateHeadingCall(bytes32 id,Heading memory heading) public {
+        require(s_Heading[id].id != 0, "Invalid id");
+
+        s_Heading[id].lat = heading.lat;
+        s_Heading[id].len = heading.len;
+        s_Heading[id].description = heading.description;
+        s_Heading[id].timeStamp = heading.timeStamp;
+
+        emit HeadingCallUpdatedEvent(
+            heading.lat,
+            heading.len,
+            heading.description,
+            heading.timeStamp
+        );
+    }
+    function removeHeadingLocation(bytes32 id) public {
+        require(s_Heading[id].id != 0,"Invalid id");
+        s_Heading[id].id = 0;
+
+        emit HeadingCallRemovedEvent(id);
+    }
+
     function getIdArray(EmergencyType emergencyType) public view returns (bytes32[] memory ids) {
         require(s_EmergencyTypeToIdArray[emergencyType].length != 0, "There is no id with this type");
         return s_EmergencyTypeToIdArray[emergencyType];
@@ -198,7 +268,7 @@ contract UserEmergency {
     }  
 
     function encryptionProcessOfEmergencyReport(EmergencyReport memory _emergencyReport) public view returns (bytes32) {
-        
+    
         return keccak256(abi.encodePacked(
             msg.sender,
             _emergencyReport.lat,
@@ -209,5 +279,24 @@ contract UserEmergency {
             _emergencyReport.timeStamp
         ));   
     }
+    function encryptionProcessOfInformation(Information memory _information) public view returns (bytes32) {
+        return keccak256(abi.encodePacked(
+            msg.sender,
+            _information.lat,
+            _information.len,
+            _information.description,
+            _information.timeStamp
+        ));
+    } 
+    function encryptionProcessOfHeading(Heading memory _heading) public view returns (bytes32) {
+        return keccak256(abi.encodePacked(
+            msg.sender,
+            _heading.lat,
+            _heading.len,
+            _heading.description,
+            _heading.timeStamp
+        ));
+    }
+    
    
 }
