@@ -3,7 +3,7 @@ pragma solidity ^0.8.18;
 
 contract UserEmergency {
 
-    enum EmergencyType {Water, Food, Tent, UnderRubble, UnderDanger, SpecialNeed, WorkMachine}
+    enum EmergencyType {Water, Food, Tent, UnderRubble, UnderDanger, SpecialNeed, WorkMachine,Custom}
 
     struct EmergencyCall {
         address creator;
